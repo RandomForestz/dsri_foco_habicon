@@ -27,7 +27,8 @@ packages <- c(
   'devtools',
   "stars",
   "janitor",
-  "akima")
+  "akima",
+  "tmap")
 
 # tack tidyverse on the end always to keep tidyverse functions as default for function conflicts
 packages <- c(packages, "tidyverse")
