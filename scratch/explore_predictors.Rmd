@@ -1,0 +1,60 @@
+---
+title: "Explore Predictor Variables"
+author: "Caitlin Mothes"
+date: "`r Sys.Date()`"
+---
+
+# Explore Predictor Variables
+
+```{r}
+source("setup.R")
+
+# read in fort collins boundary
+foco_boundary <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+```
+
+## Look into NIC greenspace and impervious surface
+
+Note that these are clipped to FoCo boundary
+
+```{r}
+greenspace <- read_sf("data/nature_in_the_city/gis/nic_green_space_2015.shp") %>% 
+ #invalid polygons, make valid first
+   st_make_valid()
+
+imp_surface <- read_sf("data/nature_in_the_city/gis/impervious_surfaces_fort_collins_2015.shp") %>% 
+  # invalid polygons, make valid first
+  st_make_valid() %>% 
+  # transform to crs of foco boundary
+  st_transform(crs = st_crs(foco_boundary))
+```
+
+Explore via mapping
+
+```{r}
+tmap_mode("view")
+
+qtm(greenspace, fill = "green")
+
+# mapping impervious surface takes way too long
+```
+
+Convert and save as rasters to reduce file size
+
+```{r}
+# create empty raster with ideal pixel size and matching crs
+raster_template <- rast(foco_boundary, res = 10)
+
+# convert polygons to rasters
+greenspace_raster <- rasterize(greenspace, raster_template)
+
+imp_surface_raster <- rasterize(imp_surface, raster_template, touches = TRUE)
+
+# map it out
+tm_shape(greenspace_raster) + 
+  tm_raster(col = "layer", palette = "green") +
+  tm_shape(imp_surface_raster) + 
+  tm_raster(col = "layer", palette = "orange")
+
+# some mismatch and overlap here, may need to decrease raster pixel size OR use raw polygons and calculate distance to impervious surface?
+```
