@@ -1,0 +1,116 @@
+---
+title: "Code to process predictors for urban niche model"
+author: "Mikko Jimenez, Josh Carrell, and Caitlin Mothes"
+date: "'r Sys.Date()'"
+output: html_notebook
+---
+
+## Process predictors
+
+As part of a broader pipeline for running a niche model in urban settings, this script is designed to provide a flexible process for reading in predictor variables, setting them to a consistent coordinate reference system, and cropping them to an extent of interest. 
+
+Note: it is currently unclear if predictors will be expected to be downloaded prior to running this script or if we will be pulling predictors directly from an API. I've written code for each situation below. 
+
+## set up environment
+```{r}
+source("setup.R")
+
+# read in spatial layer that includes full extent of interest, in this case a boundary .shp
+# having issues with symlink, run by Caitlin
+template <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+
+# list of paths to predictors (shapefiles, .tifs, etc.)
+predictor_paths <- c("data/input_raw/Hydrology/Hydrology.shp",
+                     "data/input_raw/nlcd_tcc_CONUS_2021_v2021-4/nlcd_tcc_conus_2021_v2021-4.tif")
+
+# if needed, quick plot just to make sure your file looks right
+#plot(template)
+```
+
+## set the 'template' crs and extent and write a function that matches these for predictors
+```{r}
+# set the CRS and extent from the template shapefile
+template_crs <- st_crs(template)$proj4string
+template_extent <- st_bbox(template)
+
+# write function that reads in predictors and matches CRS and extent to the template
+# I assume we'll mostly be using .shps and .tifs, but my thought process is that we can add to this function if other file types come along 
+process_file <- function(file_path, template_crs, template_extent) {
+  if (grepl("\\.shp$", file_path, ignore.case = TRUE)) {
+    # Read in shapefile
+    shapefile <- st_read(file_path)
+    
+    # Set CRS to match the template
+    shapefile <- st_transform(shapefile, crs = template_crs)
+    
+    # Set extent to match the template (crop if necessary)
+    shapefile <- st_crop(shapefile, template_extent)
+    
+    # Extract filename without extension for naming
+    file_name <- tools::file_path_sans_ext(basename(file_path))
+    
+    # Save as an independent object
+    assign(file_name, shapefile, envir = .GlobalEnv)
+    
+  } else if (grepl("\\.tif$", file_path, ignore.case = TRUE)) {
+    # Read in raster and template files
+    raster_file <- rast(file_path)
+    template <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+    
+    # Define raster crs
+    raster_crs <- st_crs(raster_file)$proj4string
+    
+    # Set template temporarily to raster crs
+    shapefile_temp <- st_transform(template, crs = raster_crs)
+    template_extent_temp <- st_bbox(shapefile_temp)
+    
+    # Crop raster to match the template extent
+    raster_file <- crop(raster_file, ext(template_extent_temp))
+    
+    # Project cropped raster into template crs
+    raster_file <- project(raster_file, crs(template_crs))
+    
+    # Extract filename without extension for naming
+    file_name <- tools::file_path_sans_ext(basename(file_path))
+    
+    # Save as an independent object
+    assign(file_name, raster_file, envir = .GlobalEnv)
+    
+  } else {
+    stop("Unsupported file type.")
+  }
+}
+
+# Process each predictor file and save as independent objects
+for (file_path in predictor_paths) {
+  process_file(file_path, template_crs = template_crs, template_extent = template_extent)
+}
+```
+
+## plot all layers in tmap to explore overlays 
+```{r}
+# plot the layers using tmap
+tmap_mode("view")
+
+# add to this as needed
+tm_shape(template) +
+  tm_lines() +  
+  tm_shape(`nlcd_tcc_conus_2021_v2021-4`) +
+  tm_raster(palette = "Greens") +  
+  tm_shape(Hydrology) +
+  tm_fill("blue") +  
+  tm_layout(legend.show = TRUE) 
+```
+
+## save files to predictor folder
+```{r}
+# define folder path
+input_processed_path<-"data/input_processed"
+
+# write spatraster
+writeRaster(`nlcd_tcc_conus_2021_v2021-4`, overwrite=TRUE, paste0(input_processed_path,"/nlcd_tcc_conus_2021_v2021.tif"))
+# write shapefile
+st_write(Hydrology, append=FALSE, paste0(input_processed_path,"/Hydrology.shp"))
+```
+
+
