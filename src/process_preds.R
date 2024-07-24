@@ -1,37 +1,17 @@
----
-title: "Code to process predictors for urban niche model"
-author: "Mikko Jimenez, Josh Carrell, and Caitlin Mothes"
-date: "'r Sys.Date()'"
-output: html_notebook
----
+#' process_preds
+#'
+#' This function reads in a list of spatial predictor file paths and processes them for a niche
+#' model. Specifically, it reads in raw files, sets their crs and extent to a define 'template'
+#' file, and rasterizes the file if necessary.
+#' 
+#' @param input_path File pathway to the raw predictor spatial file
+#' @param template_path File pathway to the 'template' file that will be used to standardize crs and ext
+#' @param resolution Desired resolution for processed raster file output
+#' @param save Whether to save (TRUE) the resulting dataframe (as .tif) or not (FALSE)
+#' @param output_path If `save = TRUE`, the file path to save the dataframe.
+#'
+#' @return A spatraster with crs and ext that is consistent with template and res that is set to desired resolution
 
-## Process predictors
-
-As part of a broader pipeline for running a niche model in urban settings, this script is designed to provide a flexible process for reading in predictor variables, setting them to a consistent coordinate reference system, and cropping them to an extent of interest. 
-
-Note: it is currently unclear if predictors will be expected to be downloaded prior to running this script or if we will be pulling predictors directly from an API. I've written code for each situation below. 
-
-## set up environment
-```{r}
-source("setup.R") 
-
-# read in spatial layer that includes full extent of interest, in this case a boundary .shp
-template_path <- "data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp"
-
-# list of paths to predictors (shapefiles, .tifs, etc.)
-predictor_paths <- c("data/input_raw/Hydrology/Hydrology.shp",
-                     "data/input_raw/nlcd_tcc_CONUS_2021_v2021-4/nlcd_tcc_conus_2021_v2021-4.tif")
-
-# set desired resolution
-resolution = 100
-
-# set output directory
-output_path <- "data/input_processed"
-```
-
-## set the 'template' crs and extent and write a function that matches these for predictors
-```{r}
-# write function that reads in predictors and matches CRS and extent to the template
 process_file <- function(input_path, template_path, resolution, save = FALSE, output_path = "data/input_processed") {
   # Read in the template .shp and save as an sf object
   template <- read_sf(template_path)
@@ -40,14 +20,14 @@ process_file <- function(input_path, template_path, resolution, save = FALSE, ou
   # Initialize variables to hold the processed objects
   rast_shapefile <- NULL
   raster_file <- NULL
-
+  
   if (grepl("\\.shp$", input_path, ignore.case = TRUE)) {
     # Read in shapefile
     shapefile <- st_read(input_path)
-
+    
     # Set CRS to match the template
     shapefile <- st_transform(shapefile, crs = crs(template))
-
+    
     # Set extent to match the template (crop if necessary)
     shapefile <- st_crop(shapefile, st_bbox(template))
     
@@ -58,17 +38,17 @@ process_file <- function(input_path, template_path, resolution, save = FALSE, ou
     rast_shapefile <- terra::rasterize(shapefile, raster_template, fun = mean)
     # Set CRS to match the shapefile
     crs(rast_shapefile) <- st_crs(shapefile)$proj4string
-
+    
     # Extract filename without extension for naming
     file_name <- tools::file_path_sans_ext(basename(input_path))
-
+    
     # Save as an independent object
     assign(file_name, rast_shapefile, envir = .GlobalEnv)
     
   } else if (grepl("\\.tif$", input_path, ignore.case = TRUE)) {
     # Read in raster and template files
     raster_file <- rast(input_path)
-
+    
     # Set template temporarily to raster CRS
     shapefile_temp <- st_transform(template, crs = crs(raster_file))
     raster_file <- crop(raster_file, shapefile_temp)
@@ -100,29 +80,7 @@ process_file <- function(input_path, template_path, resolution, save = FALSE, ou
     if (!is.null(raster_file)) {
       # Write raster file
       writeRaster(raster_file, filename = file.path(output_path, paste0(file_name, ".tif")), overwrite = TRUE)
-    
+      
     }
   }
 }
-
-# Process each predictor file and save as independent objects
-for (input_path in predictor_paths) {
-  process_file(input_path, template_path, resolution, save=TRUE, output_path)
-}
-```
-
-## plot all layers in tmap to explore overlays 
-```{r}
-# plot the layers using tmap
-tmap_mode("view")
-
-# add to this as needed
-tm_shape(template_sf) +
-  tm_lines(col = "red", lwd = 2) +
-  tm_shape(`nlcd_tcc_conus_2021_v2021-4`) +
-  tm_raster(palette = "Greens", alpha = 0.5, title = "NLCD TCC 2021") +
-  tm_shape(Hydrology) +
-  tm_raster(palette = "Blues", alpha = 0.5, title = "Hydrology")
-```
-
-
