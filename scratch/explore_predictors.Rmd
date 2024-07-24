@@ -58,3 +58,47 @@ tm_shape(greenspace_raster) +
 
 # some mismatch and overlap here, may need to decrease raster pixel size OR use raw polygons and calculate distance to impervious surface?
 ```
+
+
+# Explore NIC model outputs
+
+## Habitat use and connectivity
+
+```{r}
+# start with rwbl
+
+rwbl_habitat <- rast("data/nic_wildlife_connectivity_map_v2/probability_of_habitat_use/rwbl_hab_use")
+
+rwbl_cores <- read_sf("data/nic_wildlife_connectivity_map_v2/connectivity_models/rwbl_core_habitat_patches.shp") %>% 
+  # fix invalid polygons
+  st_make_valid()
+
+rwbl_conn <- rast("data/nic_wildlife_connectivity_map_v2/connectivity_models/rwbl_connect")
+
+```
+
+## Explore outputs
+
+```{r}
+tmap_mode("view")
+
+tm_shape(rwbl_habitat) +
+  tm_raster(style = "cont") +
+  tm_shape(rwbl_conn) +
+  tm_raster(style = "cont") +
+  tm_shape(rwbl_cores) +
+  tm_polygons()
+
+
+```
+
+See how cores relate to natural habitat
+```{r}
+natural_habitat <- read_sf("data/input_raw/Natural_Habitat/bc8f7f07-7560-4191-aa2e-8f274a1c29e7202046-1-133oxp5.v8wfi.shp")
+
+tm_shape(natural_habitat) +
+  tm_polygons(col = "red") +
+  tm_shape(rwbl_cores) + 
+  tm_polygons(col = "blue")
+```
+
