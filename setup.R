@@ -39,10 +39,10 @@ packageLoad(packages)
 
 # source all functions --------------------------
 
-# purrr::map(list.files(
-#   path = "src/",
-#   pattern = "*.R",
-#   full.names = TRUE,
-#   recursive = TRUE
-# ),
-# source)
+purrr::map(list.files(
+  path = "src/",
+  pattern = "*.R",
+  full.names = TRUE,
+  recursive = TRUE
+),
+source)
