@@ -10,7 +10,10 @@ date: "`r Sys.Date()`"
 source("setup.R")
 
 # read in fort collins boundary
-foco_boundary <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+foco_boundary <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp") %>% 
+  # convert boundary line to single polygon
+  st_cast("POLYGON") %>% 
+  st_make_valid()
 ```
 
 ## Look into NIC greenspace and impervious surface
@@ -58,6 +61,45 @@ tm_shape(greenspace_raster) +
 
 # some mismatch and overlap here, may need to decrease raster pixel size OR use raw polygons and calculate distance to impervious surface?
 ```
+
+
+## Processing functions
+
+
+### Green Space
+
+Maybe just add a `distance = TRUE` argument to process_preds
+
+```{r}
+
+file <- "data/nature_in_the_city/gis/nic_green_space_2015.shp"
+
+green_clean <- read_sf(file) %>% 
+  # make sure no invalid geometries
+  st_make_valid() %>% 
+  # transform to crs of foco boundary
+  st_transform(crs = st_crs(foco_boundary)) %>% 
+  # add a buffer around aoi for distance calculations
+  st_crop(st_buffer(foco_boundary, 10)) %>% 
+  # merge any overlapping polygons created
+  terra::vect()
+
+r_temp <- terra::rast(green_clean, res = 1)
+
+r <- terra::rasterize(green_clean, r_temp)
+
+d <- distance(r)
+
+```
+
+Took almost a minute at 1m res, map it out
+
+```{r}
+qtm(d)
+```
+
+
+
 
 
 # Explore NIC model outputs
