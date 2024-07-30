@@ -62,9 +62,7 @@ tm_shape(greenspace_raster) +
 # some mismatch and overlap here, may need to decrease raster pixel size OR use raw polygons and calculate distance to impervious surface?
 ```
 
-
 ## Processing functions
-
 
 ### Green Space
 
@@ -80,11 +78,9 @@ green_clean <- read_sf(file) %>%
   # transform to crs of foco boundary
   st_transform(crs = st_crs(foco_boundary)) %>% 
   # add a buffer around aoi for distance calculations
-  st_crop(st_buffer(foco_boundary, 10)) %>% 
-  # merge any overlapping polygons created
-  terra::vect()
+  st_crop(st_buffer(foco_boundary, 10))
 
-r_temp <- terra::rast(green_clean, res = 1)
+r_temp <- terra::rast(green_clean, res = 10)
 
 r <- terra::rasterize(green_clean, r_temp)
 
@@ -92,15 +88,40 @@ d <- distance(r)
 
 ```
 
-Took almost a minute at 1m res, map it out
+Map it out
 
 ```{r}
-qtm(d)
+tmap_mode("view")
+
+qtm(d) +
+  qtm(green_clean)
 ```
 
+Test using `process_preds()` function:
 
+```{r}
+process_file(input_path = "data/nature_in_the_city/gis/nic_green_space_2015.shp", resolution = 10, template_path = "data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+  
 
+gs_dist <- terra::distance(nic_green_space_2015)
+```
 
+Looks good! Try with impervious surface (processing this layer takes a bit of time)
+
+```{r}
+process_file(input_path = "data/nature_in_the_city/gis/impervious_surfaces_fort_collins_2015.shp", resolution = 10, template_path = "data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+  
+
+is_dist <- terra::distance(impervious_surfaces_fort_collins_2015)
+```
+
+```{r}
+tm_shape(is_dist) +
+  tm_raster(style = "cont") +
+  qtm(green_clean)
+```
+
+Seeing some edge effects here...using an updated impervious surface layer and an aoi buffer could prevent this.
 
 # Explore NIC model outputs
 
@@ -135,6 +156,7 @@ tm_shape(rwbl_habitat) +
 ```
 
 See how cores relate to natural habitat
+
 ```{r}
 natural_habitat <- read_sf("data/input_raw/Natural_Habitat/bc8f7f07-7560-4191-aa2e-8f274a1c29e7202046-1-133oxp5.v8wfi.shp")
 
@@ -143,4 +165,3 @@ tm_shape(natural_habitat) +
   tm_shape(rwbl_cores) + 
   tm_polygons(col = "blue")
 ```
-
