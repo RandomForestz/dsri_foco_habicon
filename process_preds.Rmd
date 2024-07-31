@@ -16,14 +16,14 @@ Note: it is currently unclear if predictors will be expected to be downloaded pr
 source("setup.R") 
 
 # read in spatial layer that includes full extent of interest, in this case a boundary .shp
-template_path <- "data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp"
+template <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
 
 # list of paths to predictors (shapefiles, .tifs, etc.)
-predictor_paths <- c("data/input_raw/Hydrology/Hydrology.shp",
-                     "data/input_raw/nlcd_tcc_CONUS_2021_v2021-4/nlcd_tcc_conus_2021_v2021-4.tif")
+hydrology_path <- c("data/input_raw/Hydrology/Hydrology.shp")
+nlcd_path <- c("data/input_raw/nlcd_tcc_CONUS_2021_v2021-4/nlcd_tcc_conus_2021_v2021-4.tif")
 
 # set desired resolution
-resolution = 100
+resolution <- 100
 
 # set output directory
 output_path <- "data/input_processed"
@@ -32,18 +32,16 @@ output_path <- "data/input_processed"
 ## set the 'template' crs and extent and write a function that matches these for predictors
 ```{r}
 # write function that reads in predictors and matches CRS and extent to the template
-process_file <- function(input_path, template_path, resolution, save = FALSE, output_path = "data/input_processed") {
-  # Read in the template .shp and save as an sf object
-  template <- read_sf(template_path)
-  assign("template_sf", template, envir = .GlobalEnv)
+process_preds <- function(predictor_path, template, resolution, save, output_path) {
   
   # Initialize variables to hold the processed objects
   rast_shapefile <- NULL
   raster_file <- NULL
+  output_object <- NULL
 
-  if (grepl("\\.shp$", input_path, ignore.case = TRUE)) {
+  if (grepl("\\.shp$", predictor_path, ignore.case = TRUE)) {
     # Read in shapefile
-    shapefile <- st_read(input_path)
+    shapefile <- st_read(predictor_path)
 
     # Set CRS to match the template
     shapefile <- st_transform(shapefile, crs = crs(template))
@@ -59,15 +57,15 @@ process_file <- function(input_path, template_path, resolution, save = FALSE, ou
     # Set CRS to match the shapefile
     crs(rast_shapefile) <- st_crs(shapefile)$proj4string
 
-    # Extract filename without extension for naming
-    file_name <- tools::file_path_sans_ext(basename(input_path))
+    # Extract filename without extension for naming 
+    file_name <- tools::file_path_sans_ext(basename(predictor_path))
 
-    # Save as an independent object
-    assign(file_name, rast_shapefile, envir = .GlobalEnv)
+    # Store the processed object with the filename
+    output_object <- list(name = file_name, object = rast_shapefile)
     
-  } else if (grepl("\\.tif$", input_path, ignore.case = TRUE)) {
+  } else if (grepl("\\.tif$", predictor_path, ignore.case = TRUE)) {
     # Read in raster and template files
-    raster_file <- rast(input_path)
+    raster_file <- rast(predictor_path)
 
     # Set template temporarily to raster CRS
     shapefile_temp <- st_transform(template, crs = crs(raster_file))
@@ -77,10 +75,10 @@ process_file <- function(input_path, template_path, resolution, save = FALSE, ou
     raster_file <- project(raster_file, crs(template), res = resolution)
     
     # Extract filename without extension for naming
-    file_name <- tools::file_path_sans_ext(basename(input_path))
+    file_name <- tools::file_path_sans_ext(basename(predictor_path))
     
-    # Save as an independent object
-    assign(file_name, raster_file, envir = .GlobalEnv)
+    # Store the processed object with the filename
+    output_object <- list(name = file_name, object = raster_file)
     
   } else {
     stop("Unsupported file type.")
@@ -103,12 +101,21 @@ process_file <- function(input_path, template_path, resolution, save = FALSE, ou
     
     }
   }
-}
+  
+    # Assign the output_object to the global environment with the filename as the variable name
+    #assign(file_name, output_object, envir = .GlobalEnv)
+    
+    # Return the processed object with the filename
+    return(output_object)
+} 
+  
+```
 
+```{r}
 # Process each predictor file and save as independent objects
-for (input_path in predictor_paths) {
-  process_file(input_path, template_path, resolution, save=TRUE, output_path)
-}
+hydrology_processed<- process_preds(hydrology_path, template, resolution, save=TRUE, output_path)
+nlcd_processed <- process_preds(nlcd_path, template, resolution, save=TRUE, output_path)
+
 ```
 
 ## plot all layers in tmap to explore overlays 
@@ -117,12 +124,12 @@ for (input_path in predictor_paths) {
 tmap_mode("view")
 
 # add to this as needed
-tm_shape(template_sf) +
+tm_shape(template) +
   tm_lines(col = "red", lwd = 2) +
-  tm_shape(`nlcd_tcc_conus_2021_v2021-4`) +
-  tm_raster(palette = "Greens", alpha = 0.5, title = "NLCD TCC 2021") +
-  tm_shape(Hydrology) +
-  tm_raster(palette = "Blues", alpha = 0.5, title = "Hydrology")
+  tm_shape(nlcd_processed[[2]]) + # Access the first SpatRaster object in the list
+  tm_raster() +
+  tm_shape(hydrology_processed[[2]]) + # Access the first SpatRaster object in the list
+  tm_raster()
 ```
 
 
