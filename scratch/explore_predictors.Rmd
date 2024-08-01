@@ -10,10 +10,7 @@ date: "`r Sys.Date()`"
 source("setup.R")
 
 # read in fort collins boundary
-foco_boundary <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp") %>% 
-  # convert boundary line to single polygon
-  st_cast("POLYGON") %>% 
-  st_make_valid()
+foco_boundary <- read_sf("data/ft_collins_GMA.shp")
 ```
 
 ## Look into NIC greenspace and impervious surface

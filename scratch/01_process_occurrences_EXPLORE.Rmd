@@ -121,12 +121,7 @@ write_csv(obs_final, "data/NIC_survey_occ_processed.csv")
 Read in aoi (FOCO GMA)
 
 ```{r}
-foco_boundary <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp") %>%
-  # convert boundary line to single polygon
-  st_cast("POLYGON") %>%
-  st_make_valid()
-
-
+foco_boundary <- read_sf("data/ft_collins_GMA.shp")
 ```
 
 Get list of species names
@@ -136,7 +131,7 @@ species_names <- read_csv("data/NIC_survey_occ_processed.csv") %>%
   pull(scientific_name) %>% unique()
 ```
 
-Pull and clean observations from `spocc`
+Test pull and clean observations from `spocc`
 
 ```{r}
 library(spocc)
@@ -151,12 +146,9 @@ bounds <- foco_boundary %>%
   st_bbox() %>% 
   as.vector()
 
-# date max range (Sys.Date operates weird inside a vector)
-max_date <- Sys.Date()
-
 # can't get occ() filters to work so will do that after the original call
 sp_occ <- spocc::occ(
-  query = species_names[1],
+  query = species_names,
   from = c(
     "gbif",
     "inat",
@@ -168,9 +160,9 @@ sp_occ <- spocc::occ(
     "ebird"
   ),
   geometry = bounds,
-  #date = c("2014-01-01", max_date),
+  date = c("2014-01-01", "2024-12-31"),
   has_coords = TRUE,
-  limit = 5000
+  limit = 100
 ) %>%
   spocc::occ2df()
 
@@ -181,40 +173,91 @@ Compare total number of occurrences per source
 
 ```{r}
 sp_occ %>% 
-  group_by(prov) %>% 
-  count()
+  group_by(name, prov) %>% 
+  count() %>% 
+  ggplot(aes(x = prov, y = n)) +
+  geom_col()+
+  facet_wrap(~name)
 
 # compare after removing duplicates
 sp_occ %>% 
-  group_by(prov) %>% 
-  distinct(latitude, longitude) %>% count()
+  group_by(name, prov) %>% 
+  distinct(latitude, longitude) %>% 
+  count()%>% 
+  ggplot(aes(x = prov, y = n)) +
+  geom_col()+
+  facet_wrap(~name)
+
+# only 3 providers
+distinct(sp_occ, prov)
+
+
+# max # returned, loop back to 
+sp_occ %>% 
+  group_by(name, prov) %>% 
+  count() %>% 
+  arrange(-n)
 ```
 
-ebird needs an API key, maybe just stick with gbif for now based on results (definitely has the most occurrences)
+ebird needs an API key?
 
-Make spatial and map them out
+The only providers that returned data are GBIF, iNat, and VertNet
+
+Clean data
 
 ```{r}
-sp_occ_sf <- sp_occ %>% 
-  # remove missing coords
-  filter(!is.na(latitude), !is.na(longitude)) %>% 
-  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+# clean sp_occ
+sp_occ_clean <- sp_occ %>%
+  # clean up species names between providers
+  mutate(species = stringr::word(name, 1, 2)) %>%
+  # remove duplicates
+  group_by(species) %>% 
+  distinct(longitude, latitude, .keep_all = TRUE) %>% 
+  # remove missing coordinates
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  ungroup() %>% 
+  # make spatial and filter to aoi (vertnet skips that part)
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
+  # convert to crs of aoi
+  st_transform(crs = crs(foco_boundary)) %>%
+  st_filter(foco_boundary)
 ```
 
-Map
+Map them out
 
 ```{r}
-sp_occ_sf %>% 
-  st_filter(st_transform(foco_boundary, crs = st_crs(sp_occ_sf))) %>% 
+tmap_mode("view")
+
+sp_occ_clean %>% 
 tm_shape() +
-  tm_dots()
+  tm_dots(col = "species")
 ```
 
-See which provider did not filter - (GBIF and inat did, vertnet did not, as expected)
+## Test `get_occ()` function
 
 ```{r}
-sp_occ_sf %>% 
-  st_filter(st_transform(foco_boundary, crs = st_crs(sp_occ_sf))) %>% 
-  group_by(prov) %>% 
-  count()
+source("src/get_occ.R")
+
+pulled_occ <- get_occ(species = species_names,
+                aoi = foco_boundary,
+                limit = 50000,
+                type = "df",
+                save = TRUE)
+
+
+```
+
+## Join new occurrences with survey data for final dataset
+
+```{r}
+final_occ <- read_csv("data/NIC_survey_occ_processed.csv") %>% 
+  dplyr::select(species = scientific_name, latitude, longitude, source = "nic_survey") %>% 
+  bind_rows(pulled_occ %>% dplyr::select(species, latitude = lat, longitude = long, source = prov)) %>% 
+  # remove and duplicates
+  distinct(longitude, latitude, .keep_all = TRUE)
+```
+
+```{r}
+# save final output
+write_csv(final_occ, "data/input_occ/final_model_occurrences.csv")
 ```
