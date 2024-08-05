@@ -28,7 +28,9 @@ packages <- c(
   "stars",
   "janitor",
   "akima",
-  "tmap")
+  "tmap",
+  "spocc",
+  "furrr")
 
 # tack tidyverse on the end always to keep tidyverse functions as default for function conflicts
 packages <- c(packages, "tidyverse")
