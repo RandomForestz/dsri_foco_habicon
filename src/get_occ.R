@@ -9,7 +9,7 @@
 #' @param limit The maximum number of occurrences to return for a single species. Default is 100000.
 #' @param type  Either 'sf' to return an sf object or 'df' to return a dataframe. Default is a dataframe.
 #' @param save Whether to save (TRUE) the resulting dataframe or not (FALSE)
-#' @param output_path If `save = TRUE`, the file path to save the dataframe.
+#' @param output_path If `save = TRUE`, the file path to save the dataframe or sf object.
 #'
 #' @return  Either an sf object or tabular dataframe of all cleaned species occurrences.
 get_occ <- function(species,
@@ -20,7 +20,7 @@ get_occ <- function(species,
                     save = FALSE,
                     output_path = "data/input_occ") {
   
-  ## get bounds for socc search
+  ## get bounds for spocc search
   bounds <- aoi %>% 
     # make sure in WGS 84
     st_transform(crs = 4326) %>% 
@@ -56,11 +56,9 @@ get_occ <- function(species,
     # filter date range
     #filter(date >= dates[1] & date <= dates[2]) %>% 
     # remove duplicates
-    group_by(species) %>% 
-    distinct(longitude, latitude, .keep_all = TRUE) %>% 
+    distinct(species, longitude, latitude, .keep_all = TRUE) %>% 
     # remove missing coordinates
     filter(!is.na(latitude), !is.na(longitude)) %>%
-    ungroup() %>% 
     # make spatial and filter to aoi (vertnet skips that part)
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
     # convert to crs of aoi
@@ -94,10 +92,11 @@ get_occ <- function(species,
       dir.create(output_path, recursive = TRUE)
     }
     
-    if (inherits(sp_occ_clean, "sf")) {
+    if (inherits(final_occ, "sf")) {
       # Write shapefile
       st_write(final_occ,
-               file.path(output_path, "retrieved_occurrences.shp"))
+               file.path(output_path, "retrieved_occurrences.shp"),
+               append = FALSE)
       
     } else {
       # save dataframe
