@@ -238,23 +238,52 @@ tm_shape() +
 ```{r}
 source("src/get_occ.R")
 
-pulled_occ <- get_occ(species = species_names,
-                aoi = foco_boundary,
-                limit = 50000,
-                type = "df",
-                save = TRUE)
+# use `furrr` to run faster in parallel
 
+## run inside system.time to calc run time
+system.time(pulled_occ <- furrr::future_map_dfr(species_names,
+                                    ~ get_occ(
+                                      species = .x,
+                                      aoi = foco_boundary,
+                                      limit = 50000,
+                                      type = "df"
+                                    )))
 
+```
+
+## Explore output
+
+```{r}
+# counts
+pulled_occ %>% 
+  group_by(species) %>% 
+  count()
+
+pulled_occ %>% 
+  group_by(species, prov) %>% 
+  count()
+
+# map
+tmap_mode("view")
+
+pulled_occ %>% 
+  st_as_sf(coords = c("long", "lat"), crs = 4326) %>% 
+  tm_shape() + 
+  tm_dots(col = "species")
+
+# check date range
+range(pulled_occ$date) #most recent was from two weeks ago
 ```
 
 ## Join new occurrences with survey data for final dataset
 
 ```{r}
 final_occ <- read_csv("data/NIC_survey_occ_processed.csv") %>% 
-  dplyr::select(species = scientific_name, latitude, longitude, source = "nic_survey") %>% 
+  dplyr::select(species = scientific_name, latitude, longitude) %>% 
+  mutate(source = "nic_survey") %>% 
   bind_rows(pulled_occ %>% dplyr::select(species, latitude = lat, longitude = long, source = prov)) %>% 
   # remove and duplicates
-  distinct(longitude, latitude, .keep_all = TRUE)
+  distinct(species, longitude, latitude, .keep_all = TRUE)
 ```
 
 ```{r}
