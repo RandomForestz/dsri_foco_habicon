@@ -23,11 +23,26 @@ sqlTables(survey_db)
 
 
 # read in necessary files
-bird_obs <- sqlFetch(survey_db, "bird_observations") %>% as_tibble()
 
+## birds
+bird_obs <- sqlFetch(survey_db, "bird_observations")
+
+bird_species <- sqlFetch(survey_db, "bird_species")
+
+## combine
+birds <- left_join(bird_obs, bird_species, by = c("species" = "alpha_code"))
+
+## butterflies
 butterfly_obs <- sqlFetch(survey_db, "butterfly_observations")
 
+butterfly_species <- sqlFetch(survey_db, "butterfly_species")
+
+butterflies <- left_join(butterfly_obs, butterfly_species, by = c("species" = "common_name"))
+
+## site info
 sites <- sqlFetch(survey_db, "sites")
+
+
 
 
 ```
@@ -44,69 +59,138 @@ Filter species of interest
 
 *For now, focus on same species used in 2019 Nature in the City Report:*
 
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| **Species**                 | **Relation to ecological metrics and possible ecological indications**                                                      |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Red-winged Blackbird (RWBL) | Negatively correlated with detections of urban-adapted bird species.                                                        |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             | The presence of this species may indicate that the community and habitat are not suitable for urban-adapted bird species.   |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Western Kingbird (WEKI)     | Positively correlated with detections urban-sensitive bird species.                                                         |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             | The presence of this species may indicate that the community and habitat can support urban-sensitive bird species.          |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Western Meadowlark (WEME)   | Positively correlated with detections urban-sensitive bird species.                                                         |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             | The presence of this species may indicate that the community and habitat can support urban-sensitive bird species.          |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Yellow Warbler (YEWA)       | Species of interest for the City of Fort Collins Natural Areas program.                                                     |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Clouded Sulphur             | Positively correlated with detections of non-resident butterfly species.                                                    |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             | The presence of this species may indicate that the community and habitat can support a non-resident butterfly species.      |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Orange Sulphur              | Positively correlated with butterfly species richness.                                                                      |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             | The presence of this species may indicate that the community and habitat can support a wide variety of butterfly species.   |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Painted Lady                | Positively correlated with butterfly species richness.                                                                      |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             |                                                                                                                             |
-|                             | The presence of this species may indicate that the community and habitat can support a wide variety of butterfly species.   |
-+-----------------------------+-----------------------------------------------------------------------------------------------------------------------------+
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| **Species**                 | **Relation to ecological metrics and possible ecological indications**                                                    |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Red-winged Blackbird (RWBL) | Negatively correlated with detections of urban-adapted bird species.                                                      |
+|                             |                                                                                                                           |
+|                             | The presence of this species may indicate that the community and habitat are not suitable for urban-adapted bird species. |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Western Kingbird (WEKI)     | Positively correlated with detections urban-sensitive bird species.                                                       |
+|                             |                                                                                                                           |
+|                             | The presence of this species may indicate that the community and habitat can support urban-sensitive bird species.        |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Western Meadowlark (WEME)   | Positively correlated with detections urban-sensitive bird species.                                                       |
+|                             |                                                                                                                           |
+|                             | The presence of this species may indicate that the community and habitat can support urban-sensitive bird species.        |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Yellow Warbler (YEWA)       | Species of interest for the City of Fort Collins Natural Areas program.                                                   |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Clouded Sulphur             | Positively correlated with detections of non-resident butterfly species.                                                  |
+|                             |                                                                                                                           |
+|                             | The presence of this species may indicate that the community and habitat can support a non-resident butterfly species.    |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Orange Sulphur              | Positively correlated with butterfly species richness.                                                                    |
+|                             |                                                                                                                           |
+|                             | The presence of this species may indicate that the community and habitat can support a wide variety of butterfly species. |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Painted Lady                | Positively correlated with butterfly species richness.                                                                    |
+|                             |                                                                                                                           |
+|                             | The presence of this species may indicate that the community and habitat can support a wide variety of butterfly species. |
++-----------------------------+---------------------------------------------------------------------------------------------------------------------------+
 
 ```{r}
 # double-check all species are spelled correctly
-butterfly_obs %>% distinct(species) %>% View()
+butterflies %>% distinct(scientific_name) %>% View()
 
-bird_obs %>% distinct(species) %>% View()
-# WEME has two distinct obs, likely an extra species. Remove spacies in all species name entires below
+birds %>% distinct(species) %>% View()
+# WEME has two distinct obs, likely an extra species. Remove spaces in all species name entires below
 
 
-obs_final <- bird_obs %>% 
+obs_final <- birds %>% 
   # remove spaces in bird names
   mutate(species = str_replace(species, " ", "")) %>% 
   # combine bird and butterfly datasets
   bind_rows(
-    butterfly_obs) %>% 
-  filter(species %in% c("RWBL", "WEKI", "WEME", "YEWA", "Clouded Sulfur", "Orange Sulfur", "Painted Lady")) %>% 
+    butterflies) %>% 
+  filter(species %in% c("RWBL", "WEKI", "WEME", "YEWA", "Clouded Sulphur", "Orange Sulphur", "Painted Lady")) %>% 
   # only keep subset of variables
-  select(observation_ID, survey_ID, site_ID, site_visit, species, habitat_type) %>%   # combine with site data
-  left_join(sites, by = "site_ID")
+  select(observation_ID, survey_ID, site_ID, site_visit, species, habitat_type, scientific_name) %>%   # combine with site data
+  left_join(sites, by = "site_ID") %>% 
+  #fix the one missing scientific name
+  mutate(scientific_name = if_else(species == "WEME", "Sturnella neglecta", scientific_name)) %>% 
+  # keep distinct records/site
+  distinct(species, latitude, longitude, .keep_all = TRUE)
 
+
+```
+
+### Save cleaned survey data
+
+```{r}
 # save this file for future use (remove need to use Access data table)
 write_csv(obs_final, "data/NIC_survey_occ_processed.csv")
 ```
 
 ## Read and Process Additional Occurrence Data
+
+Read in aoi (FOCO GMA)
+
+```{r}
+foco_boundary <- read_sf("data/ft_collins_GMA.shp")
+```
+
+Get list of species names
+
+```{r}
+species_names <- read_csv("data/NIC_survey_occ_processed.csv") %>% 
+  pull(scientific_name) %>% unique()
+```
+
+### Run `get_occ()` function
+
+```{r}
+source("src/get_occ.R")
+
+# use `furrr` to run faster in parallel
+
+## run inside system.time to calc run time
+system.time(pulled_occ <- furrr::future_map_dfr(species_names,
+                                    ~ get_occ(
+                                      species = .x,
+                                      aoi = foco_boundary,
+                                      limit = 50000,
+                                      type = "df"
+                                    )))
+
+```
+
+#### Explore output
+
+```{r}
+# counts
+pulled_occ %>% 
+  group_by(species) %>% 
+  count()
+
+pulled_occ %>% 
+  group_by(species, prov) %>% 
+  count()
+
+# map
+tmap_mode("view")
+
+pulled_occ %>% 
+  st_as_sf(coords = c("long", "lat"), crs = 4326) %>% 
+  tm_shape() + 
+  tm_dots(col = "species")
+
+# check date range
+range(pulled_occ$date) #most recent was from two weeks ago
+```
+
+## Join new occurrences with survey data for final dataset
+
+```{r}
+final_occ <- read_csv("data/NIC_survey_occ_processed.csv") %>% 
+  dplyr::select(species = scientific_name, latitude, longitude) %>% 
+  mutate(source = "nic_survey") %>% 
+  bind_rows(pulled_occ %>% dplyr::select(species, latitude = lat, longitude = long, source = prov)) %>% 
+  # remove and duplicates
+  distinct(species, longitude, latitude, .keep_all = TRUE)
+```
+
+```{r}
+# save final output
+write_csv(final_occ, "data/input_occ/final_model_occurrences.csv")
+```
