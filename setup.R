@@ -28,7 +28,9 @@ packages <- c(
   "stars",
   "janitor",
   "akima",
-  "tmap")
+  "tmap",
+  "spocc",
+  "furrr")
 
 # tack tidyverse on the end always to keep tidyverse functions as default for function conflicts
 packages <- c(packages, "tidyverse")
@@ -39,10 +41,10 @@ packageLoad(packages)
 
 # source all functions --------------------------
 
-# purrr::map(list.files(
-#   path = "src/",
-#   pattern = "*.R",
-#   full.names = TRUE,
-#   recursive = TRUE
-# ),
-# source)
+purrr::map(list.files(
+  path = "src/",
+  pattern = "*.R",
+  full.names = TRUE,
+  recursive = TRUE
+),
+source)

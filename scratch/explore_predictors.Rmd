@@ -10,7 +10,7 @@ date: "`r Sys.Date()`"
 source("setup.R")
 
 # read in fort collins boundary
-foco_boundary <- read_sf("data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+foco_boundary <- read_sf("data/ft_collins_GMA.shp")
 ```
 
 ## Look into NIC greenspace and impervious surface
@@ -57,4 +57,108 @@ tm_shape(greenspace_raster) +
   tm_raster(col = "layer", palette = "orange")
 
 # some mismatch and overlap here, may need to decrease raster pixel size OR use raw polygons and calculate distance to impervious surface?
+```
+
+## Processing functions
+
+### Green Space
+
+Maybe just add a `distance = TRUE` argument to process_preds
+
+```{r}
+
+file <- "data/nature_in_the_city/gis/nic_green_space_2015.shp"
+
+green_clean <- read_sf(file) %>% 
+  # make sure no invalid geometries
+  st_make_valid() %>% 
+  # transform to crs of foco boundary
+  st_transform(crs = st_crs(foco_boundary)) %>% 
+  # add a buffer around aoi for distance calculations
+  st_crop(st_buffer(foco_boundary, 10))
+
+r_temp <- terra::rast(green_clean, res = 10)
+
+r <- terra::rasterize(green_clean, r_temp)
+
+d <- distance(r)
+
+```
+
+Map it out
+
+```{r}
+tmap_mode("view")
+
+qtm(d) +
+  qtm(green_clean)
+```
+
+Test using `process_preds()` function:
+
+```{r}
+process_file(input_path = "data/nature_in_the_city/gis/nic_green_space_2015.shp", resolution = 10, template_path = "data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+  
+
+gs_dist <- terra::distance(nic_green_space_2015)
+```
+
+Looks good! Try with impervious surface (processing this layer takes a bit of time)
+
+```{r}
+process_file(input_path = "data/nature_in_the_city/gis/impervious_surfaces_fort_collins_2015.shp", resolution = 10, template_path = "data/nature_in_the_city/gis/ft_collins_GMA_boundary.shp")
+  
+
+is_dist <- terra::distance(impervious_surfaces_fort_collins_2015)
+```
+
+```{r}
+tm_shape(is_dist) +
+  tm_raster(style = "cont") +
+  qtm(green_clean)
+```
+
+Seeing some edge effects here...using an updated impervious surface layer and an aoi buffer could prevent this.
+
+# Explore NIC model outputs
+
+## Habitat use and connectivity
+
+```{r}
+# start with rwbl
+
+rwbl_habitat <- rast("data/nic_wildlife_connectivity_map_v2/probability_of_habitat_use/rwbl_hab_use")
+
+rwbl_cores <- read_sf("data/nic_wildlife_connectivity_map_v2/connectivity_models/rwbl_core_habitat_patches.shp") %>% 
+  # fix invalid polygons
+  st_make_valid()
+
+rwbl_conn <- rast("data/nic_wildlife_connectivity_map_v2/connectivity_models/rwbl_connect")
+
+```
+
+## Explore outputs
+
+```{r}
+tmap_mode("view")
+
+tm_shape(rwbl_habitat) +
+  tm_raster(style = "cont") +
+  tm_shape(rwbl_conn) +
+  tm_raster(style = "cont") +
+  tm_shape(rwbl_cores) +
+  tm_polygons()
+
+
+```
+
+See how cores relate to natural habitat
+
+```{r}
+natural_habitat <- read_sf("data/input_raw/Natural_Habitat/bc8f7f07-7560-4191-aa2e-8f274a1c29e7202046-1-133oxp5.v8wfi.shp")
+
+tm_shape(natural_habitat) +
+  tm_polygons(col = "red") +
+  tm_shape(rwbl_cores) + 
+  tm_polygons(col = "blue")
 ```

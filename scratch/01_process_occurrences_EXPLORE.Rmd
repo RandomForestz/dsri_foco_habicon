@@ -112,12 +112,6 @@ obs_final <- birds %>%
   # keep distinct records/site
   distinct(species, latitude, longitude, .keep_all = TRUE)
 
-
-```
-
-### Save cleaned survey data
-
-```{r}
 # save this file for future use (remove need to use Access data table)
 write_csv(obs_final, "data/NIC_survey_occ_processed.csv")
 ```
@@ -137,13 +131,114 @@ species_names <- read_csv("data/NIC_survey_occ_processed.csv") %>%
   pull(scientific_name) %>% unique()
 ```
 
-### Run `get_occ()` function
+Test pull and clean observations from `spocc`
+
+```{r}
+library(spocc)
+
+# set up parameters
+
+## get bounds for socc search
+bounds <- foco_boundary %>% 
+  # make sure in WGS 84
+  st_transform(crs = 4326) %>% 
+  # get bounds 
+  st_bbox() %>% 
+  as.vector()
+
+# can't get occ() filters to work so will do that after the original call
+sp_occ <- spocc::occ(
+  query = species_names,
+  from = c(
+    "gbif",
+    "inat",
+    "ecoengine",
+    "vertnet",
+    "bison",
+    "ala",
+    "idigbio",
+    "ebird"
+  ),
+  geometry = bounds,
+  date = c("2014-01-01", "2024-12-31"),
+  has_coords = TRUE,
+  limit = 100
+) %>%
+  spocc::occ2df()
+
+  
+```
+
+Compare total number of occurrences per source
+
+```{r}
+sp_occ %>% 
+  group_by(name, prov) %>% 
+  count() %>% 
+  ggplot(aes(x = prov, y = n)) +
+  geom_col()+
+  facet_wrap(~name)
+
+# compare after removing duplicates
+sp_occ %>% 
+  group_by(name, prov) %>% 
+  distinct(latitude, longitude) %>% 
+  count()%>% 
+  ggplot(aes(x = prov, y = n)) +
+  geom_col()+
+  facet_wrap(~name)
+
+# only 3 providers
+distinct(sp_occ, prov)
+
+
+# max # returned, loop back to 
+sp_occ %>% 
+  group_by(name, prov) %>% 
+  count() %>% 
+  arrange(-n)
+```
+
+ebird needs an API key?
+
+The only providers that returned data are GBIF, iNat, and VertNet
+
+Clean data
+
+```{r}
+# clean sp_occ
+sp_occ_clean <- sp_occ %>%
+  # clean up species names between providers
+  mutate(species = stringr::word(name, 1, 2)) %>%
+  # remove duplicates
+  group_by(species) %>% 
+  distinct(longitude, latitude, .keep_all = TRUE) %>% 
+  # remove missing coordinates
+  filter(!is.na(latitude), !is.na(longitude)) %>%
+  ungroup() %>% 
+  # make spatial and filter to aoi (vertnet skips that part)
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
+  # convert to crs of aoi
+  st_transform(crs = crs(foco_boundary)) %>%
+  st_filter(foco_boundary)
+```
+
+Map them out
+
+```{r}
+tmap_mode("view")
+
+sp_occ_clean %>% 
+tm_shape() +
+  tm_dots(col = "species")
+```
+
+## Test `get_occ()` function
 
 ```{r}
 source("src/get_occ.R")
 
 # use `furrr` to run faster in parallel
-plan(multisession())
 
 ## run inside system.time to calc run time
 system.time(pulled_occ <- furrr::future_map_dfr(species_names,
@@ -156,7 +251,7 @@ system.time(pulled_occ <- furrr::future_map_dfr(species_names,
 
 ```
 
-#### Explore output
+## Explore output
 
 ```{r}
 # counts
